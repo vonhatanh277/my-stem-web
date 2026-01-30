@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Oxyz Pro Max - Tùy biến Đỉnh A</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; background: #0f172a; font-family: 'Segoe UI', sans-serif; display: flex; overflow: hidden; }
+        #ui-panel { width: 380px; background: white; padding: 20px; box-shadow: 5px 0 20px rgba(0,0,0,0.3); z-index: 100; height: 100vh; overflow-y: auto; }
+        canvas { flex-grow: 1; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 12px; margin-bottom: 15px; }
+        label { display: block; font-weight: bold; font-size: 0.75rem; margin-bottom: 4px; color: #475569; }
+        .row { display: flex; gap: 5px; }
+        input { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 8px; font-size: 0.85rem; box-sizing: border-box;}
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-update { background: #2563eb; color: white; width: 100%; }
+        .btn-solve { background: #059669; color: white; width: 100%; margin-top: 5px; }
+        #log-box { background: #1e293b; color: #38bdf8; padding: 15px; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.85rem; margin-top: 10px; line-height: 1.6; }
+        h4 { margin: 0 0 10px 0; font-size: 0.8rem; color: #2563eb; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+<div id="ui-panel">
+    <h3 style="color:#2563eb; margin:0 0 15px 0;">💎 Oxyz Pro Max</h3>
+    
+    <div class="card">
+        <h4>Cấu hình Đỉnh</h4>
+        
+        <label>Tọa độ A (Gốc hoặc Tùy chỉnh):</label>
+        <div class="row">
+            <input type="number" id="Ax" value="0" placeholder="x">
+            <input type="number" id="Ay" value="0" placeholder="y">
+            <input type="number" id="Az" value="0" placeholder="z">
+        </div>
+
+        <label>Chiều cao S (So với A hoặc Tuyệt đối):</label>
+        <div class="row">
+            <input type="number" id="Sx" value="0" placeholder="x">
+            <input type="number" id="Sy" value="0" placeholder="y">
+            <input type="number" id="Sz" value="4" placeholder="z">
+        </div>
+
+        <label>Tọa độ B:</label>
+        <div class="row">
+            <input type="number" id="Bx" value="3" placeholder="x">
+            <input type="number" id="By" value="0" placeholder="y">
+        </div>
+
+        <label>Tọa độ C:</label>
+        <div class="row">
+            <input type="number" id="Cx" value="3" placeholder="x">
+            <input type="number" id="Cy" value="4" placeholder="y">
+        </div>
+
+        <label>Tọa độ D:</label>
+        <div class="row">
+            <input type="number" id="Dx" value="0" placeholder="x">
+            <input type="number" id="Dy" value="4" placeholder="y">
+        </div>
+
+        <button class="btn-update" onclick="rebuild()">🔄 Cập nhật Hình & Tọa độ</button>
+    </div>
+
+    <div class="card">
+        <label>Nhập lệnh tính toán:</label>
+        <input type="text" id="cmd" placeholder="VD: d(S, ABC) hoặc (SBC, ABCD)">
+        <button class="btn-solve" onclick="solve()">Giải Toán</button>
+    </div>
+
+    <div id="log-box">Kết quả...</div>
+</div>
+
+<script>
+    let scene, camera, renderer, controls, group, pts = {};
+
+    function init() {
+        scene = new THREE.Scene(); scene.background = new THREE.Color(0xf1f5f9);
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth-380)/window.innerHeight, 0.1, 1000);
+        camera.position.set(12, -12, 10); camera.up.set(0, 0, 1);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth - 380, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        group = new THREE.Group(); scene.add(group);
+        rebuild(); animate();
+    }
+
+    function createLabel(text, pos, color = '#1e293b', size = 40) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 400; canvas.height = 100;
+        ctx.fillStyle = color; ctx.font = `bold ${size}px Arial`;
+        ctx.fillText(text, 10, 50);
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) }));
+        sprite.position.copy(pos);
+        sprite.scale.set(2.5, 0.65, 1);
+        return sprite;
+    }
+
+    function rebuild() {
+        group.clear();
+        
+        pts = { 
+            'A': new THREE.Vector3(parseFloat(document.getElementById('Ax').value), parseFloat(document.getElementById('Ay').value), parseFloat(document.getElementById('Az').value)),
+            'B': new THREE.Vector3(parseFloat(document.getElementById('Bx').value), parseFloat(document.getElementById('By').value), 0),
+            'C': new THREE.Vector3(parseFloat(document.getElementById('Cx').value), parseFloat(document.getElementById('Cy').value), 0),
+            'D': new THREE.Vector3(parseFloat(document.getElementById('Dx').value), parseFloat(document.getElementById('Dy').value), 0),
+            'S': new THREE.Vector3(parseFloat(document.getElementById('Sx').value), parseFloat(document.getElementById('Sy').value), parseFloat(document.getElementById('Sz').value))
+        };
+
+        const axisLength = 10;
+        group.add(new THREE.AxesHelper(axisLength));
+        group.add(createLabel("Ox", new THREE.Vector3(axisLength + 0.5, 0, 0), "#ef4444", 50));
+        group.add(createLabel("Oy", new THREE.Vector3(0, axisLength + 0.5, 0), "#22c55e", 50));
+        group.add(createLabel("Oz", new THREE.Vector3(0, 0, axisLength + 0.5), "#3b82f6", 50));
+
+        Object.entries(pts).forEach(([name, pos]) => {
+            group.add(createLabel(`${name}(${pos.x},${pos.y},${pos.z})`, pos.clone().add(new THREE.Vector3(0.3, 0.3, 0.3))));
+        });
+
+        const mat = new THREE.MeshPhongMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x334155 });
+
+        [['S','A','B'],['S','B','C'],['S','C','D'],['S','D','A'],['A','B','C','D']].forEach(f => {
+            const g = new THREE.BufferGeometry().setFromPoints(f.map(n => pts[n]));
+            group.add(new THREE.Mesh(g, mat));
+            f.forEach((v, i) => {
+                const l = new THREE.BufferGeometry().setFromPoints([pts[v], pts[f[(i+1)%f.length]]]);
+                group.add(new THREE.Line(l, lineMat));
+            });
+        });
+
+        document.getElementById('log-box').innerHTML = `<b>Tọa độ hiện tại:</b><br>` + 
+            Object.entries(pts).map(([k,v]) => `${k}(${v.x},${v.y},${v.z})`).join("<br>");
+        scene.add(new THREE.AmbientLight(0xffffff, 1));
+    }
+
+    function solve() {
+        const cmd = document.getElementById('cmd').value.replace(/\s/g, "").toUpperCase();
+        let res = "";
+        try {
+            if (cmd.startsWith("D(")) {
+                const inner = cmd.substring(2, cmd.length - 1).split(",");
+                if (inner[0].length === 1 && inner[1].length === 3) {
+                    const P = pts[inner[0]], F = inner[1].split("").map(n => pts[n]);
+                    const n = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(F[1], F[0]), new THREE.Vector3().subVectors(F[2], F[0]));
+                    res = "d(" + inner[0] + ", (" + inner[1] + ")) = " + (Math.abs(n.dot(new THREE.Vector3().subVectors(P, F[0]))) / n.length()).toFixed(3);
+                } else if (inner[0].length === 1 && inner[1].length === 2) {
+                    const P = pts[inner[0]], L = inner[1].split("").map(n => pts[n]);
+                    const u = new THREE.Vector3().subVectors(L[1], L[0]);
+                    res = "d(" + inner[0] + ", " + inner[1] + ") = " + (new THREE.Vector3().crossVectors(u, new THREE.Vector3().subVectors(P, L[0])).length() / u.length()).toFixed(3);
+                } else if (inner[0].length === 2 && inner[1].length === 2) {
+                    const L1 = inner[0].split("").map(n => pts[n]), L2 = inner[1].split("").map(n => pts[n]);
+                    const u1 = new THREE.Vector3().subVectors(L1[1], L1[0]), u2 = new THREE.Vector3().subVectors(L2[1], L2[0]);
+                    const n = new THREE.Vector3().crossVectors(u1, u2);
+                    res = "d(" + inner[0] + ", " + inner[1] + ") = " + (Math.abs(n.dot(new THREE.Vector3().subVectors(L2[0], L1[0]))) / n.length()).toFixed(3);
+                }
+            } else if (cmd.startsWith("(")) {
+                const inner = cmd.substring(1, cmd.length - 1).split(",");
+                if (inner[0].length === 2 && inner[1].length === 2) {
+                    const v1 = new THREE.Vector3().subVectors(pts[inner[0][1]], pts[inner[0][0]]), v2 = new THREE.Vector3().subVectors(pts[inner[1][1]], pts[inner[1][0]]);
+                    res = "Góc = " + (Math.acos(Math.abs(v1.dot(v2))/(v1.length()*v2.length()))*180/Math.PI).toFixed(2) + "°";
+                } else if (inner[0].length === 3 && inner[1].length === 3) {
+                    const f1 = inner[0].split("").map(n => pts[n]), f2 = inner[1].split("").map(n => pts[n]);
+                    const n1 = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(f1[1], f1[0]), new THREE.Vector3().subVectors(f1[2], f1[0]));
+                    const n2 = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(f2[1], f2[0]), new THREE.Vector3().subVectors(f2[2], f2[0]));
+                    res = "Góc = " + (Math.acos(Math.abs(n1.dot(n2))/(n1.length()*n2.length()))*180/Math.PI).toFixed(2) + "°";
+                }
+            }
+        } catch(e) { res = "Lỗi dữ liệu!"; }
+        document.getElementById('log-box').innerHTML = `<b style="color:#fbbf24">KẾT QUẢ:</b><br>${res}`;
+    }
+
+    function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+    init();
+</script>
+</body>
+</html>
