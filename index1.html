@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Khám Phá Đồ Thị Với Tham Số m, n</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <style>
+        :root { --primary: #0f172a; --f-color: #2563eb; --df-color: #db2777; --bg: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); display: flex; flex-direction: column; align-items: center; padding: 15px; margin: 0; }
+        .container { display: flex; gap: 20px; max-width: 1300px; width: 100%; flex-wrap: wrap; justify-content: center; }
+        .canvas-card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; min-width: 400px; }
+        canvas { background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; cursor: grab; width: 100%; }
+        canvas:active { cursor: grabbing; }
+        .ui-panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 350px; display: flex; flex-direction: column; gap: 15px; }
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        input[type="text"] { padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: monospace; }
+        .slider-box { background: #f1f5f9; padding: 12px; border-radius: 8px; }
+        .label-row { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; }
+        .status { font-size: 0.8rem; color: #ef4444; min-height: 1.2em; font-weight: bold; }
+        kbd { background: #e2e8f0; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <h2 style="color: var(--primary);">🔬 Khám Phá Đồ Thị Hàm Số</h2>
+
+    <div class="container">
+        <div class="canvas-card">
+            <div style="font-weight: bold; color: var(--f-color); margin-bottom: 8px;">Hàm số f(x)</div>
+            <canvas id="canvasF" width="500" height="400"></canvas>
+            <div id="coordsF" style="font-size: 12px; margin-top: 5px; color: #64748b;">Tọa độ: (0, 0)</div>
+        </div>
+
+        <div class="canvas-card">
+            <div style="font-weight: bold; color: var(--df-color); margin-bottom: 8px;">Đạo hàm f'(x)</div>
+            <canvas id="canvasDF" width="500" height="400"></canvas>
+            <div id="coordsDF" style="font-size: 12px; margin-top: 5px; color: #64748b;">Tọa độ: (0, 0)</div>
+        </div>
+
+        <div class="ui-panel">
+            <div class="input-group">
+                <label>Nhập hàm số f(x) chứa m, n:</label>
+                <input type="text" id="eqInput" value="m*x^2 + n*x">
+                <div id="errorMsg" class="status"></div>
+            </div>
+
+            <div class="slider-box">
+                <div class="label-row"><span>Tham số m:</span> <span id="valM">1</span></div>
+                <input type="range" id="sliderM" min="-5" max="5" step="0.1" value="1" style="width:100%">
+            </div>
+
+            <div class="slider-box">
+                <div class="label-row"><span>Tham số n:</span> <span id="valN">0</span></div>
+                <input type="range" id="sliderN" min="-5" max="5" step="0.1" value="0" style="width:100%">
+            </div>
+
+            <div class="slider-box">
+                <div class="label-row"><span>Thu phóng (Zoom):</span> <span id="valZoom">40</span></div>
+                <input type="range" id="sliderZoom" min="5" max="200" value="40" style="width:100%">
+            </div>
+
+            <div style="font-size: 0.8rem; color: #64748b; line-height: 1.4;">
+                💡 <b>Thử các bài toán mẫu:</b><br>
+                • Biện luận cực trị: <kbd>x^3 - 3*m*x + n</kbd><br>
+                • Tiệm cận: <kbd>(m*x + 1) / (x - n)</kbd><br>
+                • Tương giao: <kbd>m*x + n</kbd> (Đường thẳng)
+            </div>
+        </div>
+    </div>
+
+<script>
+    const state = { offsetX: 0, offsetY: 0, zoom: 40, isDragging: false, lastX: 0, lastY: 0 };
+    const canvasF = { el: document.getElementById('canvasF'), ctx: document.getElementById('canvasF').getContext('2d'), color: '#2563eb' };
+    const canvasDF = { el: document.getElementById('canvasDF'), ctx: document.getElementById('canvasDF').getContext('2d'), color: '#db2777' };
+    
+    const eqInput = document.getElementById('eqInput');
+    const sliderM = document.getElementById('sliderM');
+    const sliderN = document.getElementById('sliderN');
+    const sliderZoom = document.getElementById('sliderZoom');
+
+    function drawSystem(cObj, expression, isDeriv = false) {
+        const { el, ctx, color } = cObj;
+        const m = parseFloat(sliderM.value);
+        const n = parseFloat(sliderN.value);
+        const centerX = el.width/2 + state.offsetX;
+        const centerY = el.height/2 + state.offsetY;
+
+        ctx.clearRect(0, 0, el.width, el.height);
+        
+        // Vẽ lưới
+        ctx.strokeStyle = '#f1f5f9';
+        for (let x = centerX % state.zoom; x < el.width; x += state.zoom) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, el.height); ctx.stroke();
+        }
+        for (let y = centerY % state.zoom; y < el.height; y += state.zoom) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(el.width, y); ctx.stroke();
+        }
+
+        // Vẽ trục chính
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(el.width, centerY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(centerX, 0); ctx.lineTo(centerX, el.height); ctx.stroke();
+
+        // Vẽ đồ thị
+        try {
+            let funcExpr = expression;
+            if (isDeriv) funcExpr = math.derivative(expression, 'x').toString();
+            const compiled = math.compile(funcExpr);
+
+            ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+            let first = true;
+            let prevPy = null;
+
+            for (let px = 0; px < el.width; px++) {
+                const x = (px - centerX) / state.zoom;
+                try {
+                    // Truyền tham số m, n vào hàm evaluate
+                    const y = compiled.evaluate({ x, m, n });
+                    const py = centerY - (y * state.zoom);
+
+                    if (isFinite(py) && Math.abs(py) < el.height * 2) {
+                        if (first || Math.abs(py - prevPy) > state.zoom * 20) {
+                            ctx.moveTo(px, py); first = false;
+                        } else {
+                            ctx.lineTo(px, py);
+                        }
+                        prevPy = py;
+                    } else { first = true; }
+                } catch (e) { first = true; }
+            }
+            ctx.stroke();
+            document.getElementById('errorMsg').innerText = "";
+        } catch (err) {
+            document.getElementById('errorMsg').innerText = "Lỗi phương trình! Kiểm tra biến m, n.";
+        }
+    }
+
+    function renderAll() {
+        state.zoom = parseInt(sliderZoom.value);
+        document.getElementById('valM').innerText = sliderM.value;
+        document.getElementById('valN').innerText = sliderN.value;
+        document.getElementById('valZoom').innerText = state.zoom;
+        drawSystem(canvasF, eqInput.value, false);
+        drawSystem(canvasDF, eqInput.value, true);
+    }
+
+    [eqInput, sliderM, sliderN, sliderZoom].forEach(el => el.oninput = renderAll);
+
+    function initMouse(cObj, coordId) {
+        cObj.el.onmousedown = (e) => { state.isDragging = true; state.lastX = e.clientX; state.lastY = e.clientY; };
+        window.onmouseup = () => { state.isDragging = false; };
+        window.onmousemove = (e) => {
+            if (state.isDragging) {
+                state.offsetX += (e.clientX - state.lastX);
+                state.offsetY += (e.clientY - state.lastY);
+                state.lastX = e.clientX; state.lastY = e.clientY;
+                renderAll();
+            }
+            const rect = cObj.el.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                const x = ((e.clientX - rect.left - (cObj.el.width/2 + state.offsetX)) / state.zoom).toFixed(2);
+                const y = (((cObj.el.height/2 + state.offsetY) - (e.clientY - rect.top)) / state.zoom).toFixed(2);
+                document.getElementById(coordId).innerText = `Tọa độ: (${x}, ${y})`;
+            }
+        };
+    }
+
+    initMouse(canvasF, 'coordsF');
+    initMouse(canvasDF, 'coordsDF');
+    renderAll();
+</script>
+</body>
+</html>
